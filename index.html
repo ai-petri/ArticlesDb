@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArticlesDb</title>
+    <style>
+        body{
+            display: grid;
+            grid-template-rows: auto auto auto;
+            grid-template-columns: auto 1fr;
+        }
+        form{
+            padding: 30px;
+            margin: 5px;
+            border: 1px solid grey;
+            box-shadow: 3px 2px 1px lightgrey;
+        }
+        
+        form#author_form{
+            position: relative;
+            max-width: fit-content;
+        }
+        form#author_form>a{
+            position: absolute;
+            left: 50%;
+            top: 100px;
+            translate: -50%;
+            text-align: center;
+        }
+        form#author_form>img{
+            width: calc(100% + 8px);
+            height: 200px;
+            object-fit: contain;
+        }
+ 
+        form#article_form{
+            justify-self: stretch;
+        }
+ 
+        input:not([type="date"]){
+            display: block;
+            width: 100%;
+        }
+ 
+        input, select{
+            margin-top: 10px;
+            padding: 2px;
+            margin-right: 10px;
+            min-width: 50px;
+        }
+        input:invalid{
+            background-color: lightcoral;
+        }
+        .wide{
+            width: 35%;
+        }
+        textarea{
+            resize: none;
+            width: 100%;
+            padding: 2px;
+            margin-top: 5px;
+        }
+        input[list="authors"]{
+            width: 100px;
+            display: inline;
+            margin-right: 5px;
+        }
+        
+        
+        #pdf_a{
+            float: right;
+        }
+ 
+        #author_list{
+            border: 1px solid grey;
+            grid-column: span 2 ;
+            margin: 5px;
+            box-shadow: 3px 2px 1px lightgrey;
+            display: flex;
+            overflow-x: scroll;
+        }
+        #article_list{
+            border: 1px solid grey;
+            box-shadow: 3px 2px 1px lightgrey;
+            margin: 5px;
+            grid-column: span 2 ;
+            height: 50vh;
+        }
+        .card{
+            width: 700px;
+            position: relative;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            
+        }
+        .card>img{
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            /* border-radius: 50%; */
+            /* background: grey; */
+        }
+        .card>p{
+            text-align: center;
+            font-size: 10pt;
+        }
+    </style>
+</head>
+<body>
+    <form autocomplete="off" id="author_form" onsubmit="submitAuthor(event, new FormData(this))">
+        <img>
+        <a id="image_a" href="javascript: document.querySelector('#image_input')?.click(); document.querySelector('#image_a').remove()">Загрузить фотографию</a>
+        <input type="file" id="image_input" name="image" style="display: none;" accept="image/jpg" onchange="loadImage(this.files[0])">
+        <input type="text" name="last_name" placeholder="Фамилия">
+        <input type="text" name="first_name" placeholder="Имя">
+        <input type="text" name="patronimic" placeholder="Отчество">
+        <label for="birth_date">дата рождения</label>
+        <input type="date" id="birth_date" name="birth_date"><br>
+        <input type="submit">
+    </form>
+    <form autocomplete="off" id="article_form" onsubmit="submitArticle(event, new FormData(this))">
+        <a id="pdf_a" href="javascript: document.querySelector('#pdf_input')?.click()">Загрузить PDF</a><br><br>
+        <input type="file" id="pdf_input" name="pdf" style="display: none;" accept="application/pdf">
+        <datalist id="authors"></datalist>
+        <a id="addAuthor_a" href="javascript: addAuthor()">Добавить автора</a>
+        <input class="wide" type="text" name="title" placeholder="Название">
+        <textarea name="abstract" placeholder="Abstract" rows="10"></textarea>
+        <label>Журнал</label>
+        <select class="wide" name="journal" onchange="loadVolumes(this.value)"></select>
+        <label>Том</label>
+        <select name="volume" onchange="loadIssues(this.value)"></select>
+        <label>Выпуск</label>
+        <select name="issue"></select>
+        <label>Дата</label>
+        <input type="date" name="date">
+        <input style="width: 100px;" type="submit">
+ 
+    </form>
+    <div id="author_list"></div>
+    <div id="article_list"></div>
+ 
+    <script>
+        loadAuthors("");
+        addAuthor();
+        loadJournals();
+        loadAuthorList();
+        loadArticles();
+        async function loadArticles()
+        {
+            let articleList = document.querySelector("#article_list");
+            articleList.innerHTML = "";
+            let response =  await fetch("/articles");
+            let articles = await response.json();
+            let ol = document.createElement("ol");
+            for(let article of articles)
+            {
+                let li = document.createElement("li");
+                li.innerText = `${article.authors
+                .map(o=>`${o.last_name} ${o.first_name[0]}. ${o.patronimic[0]}.`)
+                .join(", ")}.\
+                ${article.year?  article.year+". ": ""}\
+                ${article.title}.\
+                ${article.journal||""}\
+                ${article.volume||article.issue?", ":""} \
+                ${article.volume||""}${article.issue?"("+article.issue+")":""}`;
+                let a = document.createElement("a");
+                a.style.marginLeft = "5px";
+                a.innerText = "PDF";
+                a.href = "/pdf?article_id="+article.id;
+                li.append(a);
+                ol.append(li);
+            }
+            articleList.append(ol);
+ 
+        }
+        async function loadAuthorList() 
+        {
+            let response = await fetch("/authors");
+            let authors = await response.json();
+            let authorList = document.querySelector("#author_list")
+            for(let author of authors)
+            {
+                let card = document.createElement("div");
+                card.className = "card";
+                let img = document.createElement("img");
+                img.src = `/image?author_id=${author.id}`;
+                let name = document.createElement("p");
+                name.innerText = `${author.last_name} ${author.first_name} ${author.patronimic}`
+                card.append(img,name);
+                authorList.append(card);
+ 
+            }
+            
+        }
+        async function loadJournals()
+        {
+            let response = await fetch("/journals");
+            let arr = await response.json();
+            {
+                let option = document.createElement("option");
+                option.innerHTML = "";
+                document.querySelector("#article_form>select[name='journal']").append(option)
+            }
+            for(let journal of arr)
+            {
+                let option = document.createElement("option");
+                option.innerText = journal.name;
+                option.value = journal.id;
+                document.querySelector("#article_form>select[name='journal']").append(option)
+            }
+        }
+        async function loadVolumes(journal_id)
+        {
+            let select = document.querySelector("#article_form>select[name='volume']");
+            select.innerHTML = "";
+            let response = await fetch("/volumes?journal_id="+journal_id);
+            let volumes = await response.json();
+            {
+                let option = document.createElement("option");
+                option.innerText = "";
+                option.value = null;
+                select.append(option);
+            }
+            for(let volume of volumes)
+            {
+                let option = document.createElement("option");
+                option.innerText = volume.name;
+                option.value = volume.id;
+                select.append(option);
+            }
+        }
+        async function loadIssues(volume_id)
+        {
+            let select = document.querySelector("#article_form>select[name='issue']");
+            select.innerHTML = "";
+            let response = await fetch("/issues?volume_id="+volume_id);
+            let issues = await response.json();
+            {
+                let option = document.createElement("option");
+                option.innerText = "";
+                option.value = null;
+                select.append(option);
+            }
+            for(let issue of issues)
+            {
+                let option = document.createElement("option");
+                option.innerText = issue.name;
+                option.value = issue.id;
+                select.append(option);
+            }
+ 
+        }
+        function addAuthor()
+        {
+            let n = document.querySelectorAll("input[list='authors']").length;
+            let input = document.createElement("input");
+            input.setAttribute("list","authors");
+            input.name = `author${n+1}`;
+            input.placeholder = `Автор ${n+1}`;
+            input.oninput = e=>{loadAuthors(e.target.value); e.target.setCustomValidity("");}
+            document.querySelector("#article_form").insertBefore(input,document.querySelector("#addAuthor_a"));
+ 
+            loadAuthors("");
+        }
+        async function loadAuthors(search)
+        {
+            let datalist = document.querySelector("datalist#authors");
+            datalist.innerHTML = "";
+            let response = await fetch("/authors?last_name="+search);
+            let arr = await response.json();
+            for(let author of arr)
+            {
+                let option = document.createElement("option");
+                option.value = `${author.last_name} ${author.first_name?.[0]||""}. ${author.patronimic?.[0]||""}.`;
+                datalist.append(option);
+            }
+        }
+ 
+        async function submitArticle(e, data)
+        {
+            e.preventDefault();
+ 
+            let response = await fetch("/authors");
+            let authors = await response.json();
+ 
+            let author_ids = [];
+            let authorKeys = [...data.keys()].filter(o=>o.startsWith("author"));
+            for(let key of authorKeys)
+            {
+                let author = data.get(key);
+                let found = authors.find(o=>author === `${o.last_name} ${o.first_name?.[0]||""}. ${o.patronimic?.[0]||""}.`)
+                if(!found)
+                {
+                    document.querySelector(`#article_form>input[name=${key}]`).setCustomValidity("not found");
+                    return;
+                }
+                else
+                {
+                    author_ids.push(found.id);
+                }
+            }
+ 
+            
+ 
+            let response2 = await fetch("/articles", {method:"POST",body:JSON.stringify({
+                author_ids,
+                journal_id: +data.get("journal") || null,
+                volume_id: +data.get("volume") || null,
+                issue_id: +data.get("issue") || null,
+                title: data.get("title"),
+                abstract: data.get("abstract"),
+                day: new Date(data.get("date")).getDate(),
+                month: new Date(data.get("date")).getMonth() + 1,
+                year: new Date(data.get("date")).getFullYear(),                
+                pdf: await fileToDataURL(data.get("pdf"))
+            })});
+ 
+            console.log(await response2.text());
+ 
+            
+        }
+ 
+        async function loadImage(file)
+        {
+            let dataURL = await fileToDataURL(file);
+            document.querySelector("#author_form>img").src = dataURL;
+        }
+ 
+        async function submitAuthor(e, data)
+        {
+            e.preventDefault();
+            let image = await fileToDataURL(data.get("image"));
+            let last_name = data.get("last_name");
+            let first_name = data.get("first_name");
+            let patronimic = data.get("patronimic");
+            let birthDate = new Date(data.get("birth_date"));
+            let birth_year = birthDate.getFullYear();
+            let birth_month = birthDate.getMonth() + 1;
+            let birth_day = birthDate.getDate();
+ 
+            let response = await fetch("/authors", {method:"POST",body:JSON.stringify({
+                image,
+                last_name,
+                first_name,
+                patronimic,
+                birth_year,
+                birth_month,
+                birth_day
+            })}) 
+        }
+ 
+        function fileToDataURL(file)
+        {
+            return new Promise(resolve=>{
+                if(file.size == 0)
+                {
+                    resolve(null);
+                }
+                else
+                {
+                    let reader = new FileReader();
+                    reader.onload = _=>resolve(reader.result);
+                    reader.readAsDataURL(file);
+                }
+            })
+        }
+    </script>
+</body>
+</html>
